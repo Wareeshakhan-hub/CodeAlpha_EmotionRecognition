@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+data/Actor_*/
+.DS_Store
+
+# NOTE: models/*.keras and models/*.pkl are intentionally NOT ignored.
+# They are needed for cloud deployment (Streamlit Community Cloud) so
+# the deployed app can load the trained model. Keep them committed.
