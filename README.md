@@ -27,6 +27,7 @@ CodeAlpha_EmotionRecognition/
 ├── app.py                    # Streamlit GUI for visual demo (waveform + prediction)
 ├── requirements.txt
 ├── packages.txt              # System packages needed on Streamlit Cloud (ffmpeg, libsndfile1)
+├── runtime.txt                # Pins Python 3.11 for Streamlit Cloud (TensorFlow compatibility)
 └── README.md
 ```
 
@@ -115,7 +116,10 @@ alongside the demo video.
    set **Main file path** to `app.py` → click **Deploy**.
 4. Streamlit Cloud automatically installs everything in `requirements.txt` and
    the system packages listed in `packages.txt` (needed for `librosa`/`soundfile`
-   to work — `ffmpeg` and `libsndfile1`).
+   to work — `ffmpeg` and `libsndfile1`). It also reads `runtime.txt` to use
+   **Python 3.11** — this is required because TensorFlow doesn't yet publish
+   wheels for very new Python versions (e.g. 3.13/3.14), which Streamlit Cloud
+   may default to otherwise, causing an "Error installing requirements" build failure.
 5. After a couple of minutes you'll get a public link like:
    `https://your-username-codealpha-emotionrecognition.streamlit.app`
 

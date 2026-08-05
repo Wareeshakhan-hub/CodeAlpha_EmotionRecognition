@@ -7,10 +7,7 @@ instead of plain terminal output — great for demos / LinkedIn video.
 
 Supports two input modes:
   1. Upload a .wav file
-  2. Record live from your microphone (browser mic)
-
-Author: Wareesha Khan
-Project: CodeAlpha Machine Learning Internship — Task 2
+  2. Record live from your microphone (browser mic) — requires Streamlit >= 1.36
 
 Run with:
     streamlit run app.py
@@ -18,16 +15,13 @@ Run with:
 
 import os
 import sys
-import io
 import tempfile
-import traceback
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import librosa
 import librosa.display
-import soundfile as sf
 import streamlit as st
 import joblib
 from tensorflow.keras.models import load_model
@@ -48,7 +42,7 @@ EMOTION_EMOJIS = {
     "calm": "😌",
 }
 
-st.set_page_config(page_title="Speech Emotion Recognition | Wareesha Khan", page_icon="🎙️", layout="centered")
+st.set_page_config(page_title="Speech Emotion Recognition", page_icon="🎙️", layout="centered")
 
 
 @st.cache_resource
@@ -66,76 +60,43 @@ def load_artifacts():
     return model, scaler, le
 
 
-def save_audio_to_wav(raw_bytes: bytes) -> str:
-    """
-    Takes raw audio bytes (from file upload OR mic recording), decodes them
-    with soundfile/librosa (which handles wav/ogg/webm containers), and
-    re-saves as a clean, standard .wav file on disk. This avoids format
-    mismatches that can silently break feature extraction for mic recordings.
-    """
-    audio, sr = librosa.load(io.BytesIO(raw_bytes), sr=None, mono=True)
+def analyze_audio(tmp_path: str, scaler, le, model):
+    """Runs the full pipeline: waveform plot + feature extraction + prediction."""
+    # Waveform plot
+    audio, sr = librosa.load(tmp_path, sr=None)
+    fig, ax = plt.subplots(figsize=(8, 2.5))
+    librosa.display.waveshow(audio, sr=sr, ax=ax, color="#6366F1")
+    ax.set_title("Waveform")
+    ax.set_xlabel("Time (s)")
+    st.pyplot(fig)
+    plt.close(fig)
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    tmp_path = tmp.name
-    tmp.close()
+    with st.spinner("Analyzing speech..."):
+        features = extract_features(tmp_path)
+        features_scaled = scaler.transform(features.reshape(1, -1))
+        features_scaled = features_scaled.reshape(1, features_scaled.shape[1], 1)
+        probs = model.predict(features_scaled, verbose=0)[0]
 
-    sf.write(tmp_path, audio, sr, format="WAV", subtype="PCM_16")
-    return tmp_path
+    pred_idx = np.argmax(probs)
+    pred_label = le.classes_[pred_idx]
+    emoji = EMOTION_EMOJIS.get(pred_label, "🎭")
 
+    st.markdown(f"## {emoji} Predicted Emotion: **{pred_label.upper()}**")
+    st.progress(float(probs[pred_idx]))
+    st.write(f"Confidence: **{probs[pred_idx]*100:.2f}%**")
 
-def analyze_audio(raw_bytes: bytes, scaler, le, model):
-    """Runs the full pipeline: decode -> waveform plot -> feature extraction -> prediction."""
-    tmp_path = None
-    try:
-        tmp_path = save_audio_to_wav(raw_bytes)
+    st.subheader("Confidence across all emotions")
+    df = pd.DataFrame({
+        "Emotion": le.classes_,
+        "Confidence": probs * 100,
+    }).sort_values("Confidence", ascending=False)
 
-        # Waveform plot
-        audio, sr = librosa.load(tmp_path, sr=None)
-        if len(audio) == 0:
-            st.warning("⚠️ The recording seems empty. Please record a bit longer (2-3 seconds) and try again.")
-            return
-
-        fig, ax = plt.subplots(figsize=(8, 2.5))
-        librosa.display.waveshow(audio, sr=sr, ax=ax, color="#6366F1")
-        ax.set_title("Waveform")
-        ax.set_xlabel("Time (s)")
-        st.pyplot(fig)
-        plt.close(fig)
-
-        with st.spinner("Analyzing speech..."):
-            features = extract_features(tmp_path)
-            features_scaled = scaler.transform(features.reshape(1, -1))
-            features_scaled = features_scaled.reshape(1, features_scaled.shape[1], 1)
-            probs = model.predict(features_scaled, verbose=0)[0]
-
-        pred_idx = np.argmax(probs)
-        pred_label = le.classes_[pred_idx]
-        emoji = EMOTION_EMOJIS.get(pred_label, "🎭")
-
-        st.markdown(f"## {emoji} Predicted Emotion: **{pred_label.upper()}**")
-        st.progress(float(probs[pred_idx]))
-        st.write(f"Confidence: **{probs[pred_idx]*100:.2f}%**")
-
-        st.subheader("Confidence across all emotions")
-        df = pd.DataFrame({
-            "Emotion": le.classes_,
-            "Confidence": probs * 100,
-        }).sort_values("Confidence", ascending=False)
-
-        st.bar_chart(df.set_index("Emotion"))
-
-    except Exception as e:
-        st.error(f"❌ Something went wrong while analyzing the audio: {e}")
-        with st.expander("Show full error details (for debugging)"):
-            st.code(traceback.format_exc())
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+    st.bar_chart(df.set_index("Emotion"))
 
 
 st.title("🎙️ Speech Emotion Recognition")
 st.caption("CodeAlpha Machine Learning Internship — Task 2 | MFCC + CNN-LSTM")
-st.markdown("**Developed by: Wareesha Khan**")
+st.caption(f"Streamlit version running: `{st.__version__}`")
 
 model, scaler, le = load_artifacts()
 
@@ -147,28 +108,53 @@ if model is None:
     )
     st.stop()
 
-tab_upload, tab_record = st.tabs(["📁 Upload Audio", "🎤 Record Live"])
+# st.audio_input was added in Streamlit 1.36 — guard against older versions
+# so the app degrades gracefully instead of crashing with an AttributeError.
+HAS_MIC_INPUT = hasattr(st, "audio_input")
+
+if HAS_MIC_INPUT:
+    tab_upload, tab_record = st.tabs(["📁 Upload Audio", "🎤 Record Live"])
+else:
+    tab_upload = st.container()
+    tab_record = None
+    st.warning(
+        f"🎤 Live mic recording needs Streamlit ≥ 1.36, but this app is running "
+        f"**{st.__version__}**. Update `requirements.txt` to `streamlit==1.38.0` "
+        f"(or newer), then go to **Manage app → Reboot** (or delete and redeploy) "
+        f"on Streamlit Cloud so it reinstalls the correct version. "
+        f"File upload still works below in the meantime."
+    )
 
 with tab_upload:
     st.write("Upload a `.wav` audio clip and the model will predict the speaker's emotion.")
     uploaded_file = st.file_uploader("Choose a .wav file", type=["wav"], key="uploader")
 
     if uploaded_file is not None:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            tmp.write(uploaded_file.read())
+            tmp_path = tmp.name
+
         st.audio(uploaded_file, format="audio/wav")
-        analyze_audio(uploaded_file.getvalue(), scaler, le, model)
+        analyze_audio(tmp_path, scaler, le, model)
+        os.unlink(tmp_path)
     else:
         st.info("👆 Upload an audio file to get started.")
 
-with tab_record:
-    st.write("Click the mic, record 2-3 seconds of speech, then stop — the model will analyze it live.")
-    mic_audio = st.audio_input("Record your voice", key="mic")
+if HAS_MIC_INPUT:
+    with tab_record:
+        st.write("Click the mic, record a few seconds of speech, then stop — the model will analyze it live.")
+        mic_audio = st.audio_input("Record your voice", key="mic")
 
-    if mic_audio is not None:
-        st.audio(mic_audio, format="audio/wav")
-        analyze_audio(mic_audio.getvalue(), scaler, le, model)
-    else:
-        st.info("🎙️ Click the microphone icon above to record your voice.")
+        if mic_audio is not None:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                tmp.write(mic_audio.read())
+                tmp_path = tmp.name
+
+            st.audio(mic_audio, format="audio/wav")
+            analyze_audio(tmp_path, scaler, le, model)
+            os.unlink(tmp_path)
+        else:
+            st.info("🎙️ Click the microphone icon above to record your voice.")
 
 st.divider()
 st.caption("Built for CodeAlpha Machine Learning Internship — Task 2")
-st.caption("👩‍💻 Developed by **Wareesha Khan**")
