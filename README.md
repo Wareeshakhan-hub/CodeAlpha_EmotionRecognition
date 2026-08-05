@@ -98,8 +98,8 @@ Both show the waveform, the predicted emotion (with emoji), and a confidence bar
 > the app loads `models/emotion_model.keras`, `models/scaler.pkl`, and
 > `models/label_encoder.pkl`, which are only created after training.
 >
-> 🎤 Live mic recording uses `st.audio_input`, which requires **Streamlit ≥ 1.36**
-> (already pinned in `requirements.txt`) and browser microphone permission.
+> 🎤 Live mic recording uses `st.audio_input`, which requires **Streamlit ≥ 1.40**
+> (already pinned as `streamlit==1.41.0` in `requirements.txt`) and browser microphone permission.
 
 ## ☁️ Deploy to the Cloud (get a shareable link)
 You can host this app for free on **Streamlit Community Cloud** so anyone can open
@@ -143,14 +143,5 @@ number of classes. You can improve accuracy by:
 - Scikit-learn (preprocessing, metrics)
 - Matplotlib / Seaborn (visualization)
 
-## 📝 Submission Checklist (per CodeAlpha instructions)
-- [ ] Push this project to GitHub as **`CodeAlpha_EmotionRecognition`**
-- [ ] (Optional but recommended) Deploy the app on Streamlit Community Cloud and get a live link
-- [ ] Record a short video explaining the project and post it on LinkedIn, tagging **@CodeAlpha**
-- [ ] Include the GitHub repo link (and live app link, if deployed) in the LinkedIn post
-- [ ] Submit the task via the CodeAlpha submission form (shared in WhatsApp group)
-
 ---
-*Built for the CodeAlpha Machine Learning Internship — Task 2: Emotion Recognition from Speech.*
-
-**Author: Wareesha Khan**
+*A speech emotion recognition project by Wareesha Khan.*
